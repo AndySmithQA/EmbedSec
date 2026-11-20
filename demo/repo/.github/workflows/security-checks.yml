@@ -1,0 +1,53 @@
+name: security-checks
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  security-regression-tests:
+    name: security-regression-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  security-evidence:
+    name: security-evidence
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the PR description contains complete security evidence
+        # The PR body is untrusted input: pass it through an environment variable,
+        # never interpolate it into the script with ${{ }}.
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-pr-evidence.js
+
+  dependency-audit:
+    name: dependency-audit
+    runs-on: ubuntu-latest
+    # Advisory only: new upstream advisories should not block unrelated PRs during the lab.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
